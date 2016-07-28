@@ -15,12 +15,25 @@ Key files should be accessible for the application.
 
 
 
-### Key selection and verification
+### Process of authentication
 
 - Key is chosen by token's `iss` claim (and also by its `kid` parameter if provided).
 - Verification of token's signature is performed against the chosen key and its algorithm.
-- Following token's claims will be verified `exp`, `nbf`, `iat` by default.
-	The behavior could be changed by setting `verify_options` application environment variable.
+- Following token's claims will be verified `exp`, `nbf`, `iat` by default
+	(the behavior can be changed by setting `verify_options` application environment variable).
+- UserName is matched agains pattern (`[rest]` by default, matches any value;
+	the pattern can be changed by setting `username_pattern` application environment variable).
+- ClientId is matched agains pattern (`[rest]` by default, matches any value;
+	the pattern can be changed by setting `client_id_pattern` application environment variable).
+
+
+
+### Configuration
+
+It's possible to rewrite plugin application environment variables when plugin is being enabled
+by putting the `vernemq.conf` configuration file into the `etc` directory of VerneMQ release.
+The path to configuration file can be changed by setting `config_file` application environment variable.
+
 
 
 

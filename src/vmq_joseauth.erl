@@ -31,7 +31,9 @@
 	load_key/1,
 	load_key/2,
 	load_keys/0,
-	remove_keys/0
+	remove_keys/0,
+	match_pattern/3,
+	read_config/1
 ]).
 
 %% Hooks
@@ -47,27 +49,33 @@
 
 %% Configuration
 -export([
+	client_id_pattern/0,
+	username_pattern/0,
 	keys_directory/0,
 	verify_options/0,
-	success_result/0
+	success_result/0,
+	config_file/0
 ]).
 
 %% Definitions
 -define(TAB, ?MODULE).
 -define(APP, ?MODULE).
 
+-type pattern() :: [binary() | {claim, binary()} | rest].
+-type pattern_input() :: {eq | {non_neg_integer(), non_neg_integer()}, binary()}.
+
 %% Types
 -record(k_identity, {
-	iss        :: binary(),
+	iss :: binary(),
 	kid = <<>> :: binary()
 }).
 
 -type k_identity() :: #k_identity{}.
 
 -record(k_struct, {
-	identity      :: k_identity(),
-	alg           :: binary(),
-	key           :: binary(),
+	identity :: k_identity(),
+	alg :: binary(),
+	key :: binary(),
 	options = #{} :: map()
 }).
 
@@ -108,6 +116,10 @@ remove_keys() ->
 	ets:delete(?TAB),
 	ok.
 
+-spec match_pattern(pattern(), map(), binary()) -> ok.
+match_pattern(Pattern, Claims, Input) ->
+	match_pattern_input(pattern_input(Pattern, Claims), Input).
+
 %% =============================================================================
 %% Hooks
 %% =============================================================================
@@ -116,15 +128,18 @@ auth_on_register(_Peer, _SubscriberId, _UserName, undefined, _CleanSession) ->
 	Reason = missing_access_token,
 	error_logger:info_report([{?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, erlang:get_stacktrace(), error, Reason}]),
 	{error, Reason};
-auth_on_register(_Peer, _SubscriberId, _UserName, Password, _CleanSession) ->
+auth_on_register(_Peer, {_MountPoint, ClientId}, UserName, Password, _CleanSession) ->
 	try
-		_ = jose_jws_compact:decode_fn(fun select_key/2, Password),
+		Claims = jose_jws_compact:decode_fn(fun select_key/2, Password),
+		match_pattern(username_pattern(), Claims, UserName),
+		match_pattern(client_id_pattern(), Claims, ClientId),
 		success_result()
 	catch _:R ->
 		Reason = {bad_access_token, R},
 		error_logger:info_report(
 			[	{?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, erlang:get_stacktrace(), error, Reason},
-				{access_token, Password} ]),
+				{access_token, Password}]),
+
 		{error, Reason}
 	end.
 
@@ -135,6 +150,7 @@ auth_on_register(_Peer, _SubscriberId, _UserName, Password, _CleanSession) ->
 -spec start() -> ok.
 start() ->
 	{ok, _} = application:ensure_all_started(?APP),
+	read_config(config_file()),
 	load_keys().
 
 -spec stop() -> ok.
@@ -146,6 +162,14 @@ stop() ->
 %% Configuration
 %% =============================================================================
 
+-spec client_id_pattern() -> pattern().
+client_id_pattern() ->
+	application:get_env(?APP, ?FUNCTION_NAME, [rest]).
+
+-spec username_pattern() -> pattern().
+username_pattern() ->
+	application:get_env(?APP, ?FUNCTION_NAME, [rest]).
+
 -spec keys_directory() -> binary().
 keys_directory() ->
 	priv_path(list_to_binary(application:get_env(?APP, ?FUNCTION_NAME, "keys"))).
@@ -153,15 +177,53 @@ keys_directory() ->
 -spec verify_options() -> jose_claim:verify_options().
 verify_options() ->
 	Default = #{verify => [exp, nbf, iat]},
-	application:get_env(?APP, verify_options, Default).
+	application:get_env(?APP, ?FUNCTION_NAME, Default).
 
 -spec success_result() -> ok | next.
 success_result() ->
-	application:get_env(?APP, success_result, ok).
+	application:get_env(?APP, ?FUNCTION_NAME, ok).
+
+-spec config_file() -> binary().
+config_file() ->
+	list_to_binary(application:get_env(?APP, ?FUNCTION_NAME, "./etc/joseauth.conf")).
+
+-spec read_config(binary()) -> ok.
+read_config(Path) ->
+	_ =
+		case file:consult(Path) of
+			{ok, L} -> [application:set_env(?APP, Key, Val) || {Key, Val} <- L];
+			_       -> ignore
+		end,
+	ok.
 
 %% =============================================================================
 %% Internal functions
 %% =============================================================================
+
+-spec match_pattern_input(pattern_input(), binary()) -> ok.
+match_pattern_input({eq, Val}, Val)                    -> ok;
+match_pattern_input({{Pos, Len}, Val} = PInput, Input) ->
+	case Input of
+		<<_:Pos/binary, Val:Len/binary, _/bits>> -> ok;
+		_                                        -> error({nomatch_pattern, Input, PInput})
+	end.
+
+-spec pattern_input(pattern(), map()) -> pattern_input().
+pattern_input(Pattern, Claims) ->
+	pattern_input(Pattern, Claims, <<>>).
+
+-spec pattern_input(pattern(), map(), binary()) -> pattern_input().
+pattern_input([], _Claims, Acc) ->
+	{eq, Acc};
+pattern_input([rest|_], _Claims, Acc) ->
+	{{0, byte_size(Acc)}, Acc};
+pattern_input([{claim, Name}|T], Claims, Acc) ->
+	case maps:find(Name, Claims) of
+		{ok, Val} -> pattern_input(T, Claims, <<Acc/binary, Val/binary>>);
+		_         -> error({missing_claim, Name})
+	end;
+pattern_input([Val|T], Claims, Acc) ->
+	pattern_input(T, Claims, <<Acc/binary, Val/binary>>).
 
 -spec select_key(list(), jose_jws_compact:parse_options()) -> jose_jws_compact:select_key_result().
 select_key([ #{<<"kid">> := Kid}, #{<<"iss">> := Iss} | _ ], _Opts) ->
@@ -223,6 +285,57 @@ priv_path(Path) ->
 	Priv =
 		case code:priv_dir(?APP) of
 			{error, _} -> "priv";
-			Dir -> Dir
+			Dir        -> Dir
 		end,
 	<<(list_to_binary(Priv))/binary, $/, Path/binary>>.
+
+%% =============================================================================
+%% Tests
+%% =============================================================================
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+match_pattern_input_test_() ->
+	Test =
+		[	%% equal
+			{[], #{}, {eq, <<>>}},
+			{[<<>>], #{}, {eq, <<>>}},
+			{[<<"user">>], #{}, {eq, <<"user">>}},
+			{[<<"user/">>, {claim, <<"sub">>}], #{<<"sub">> => <<"joe">>}, {eq, <<"user/joe">>}},
+			{[<<"user/">>, {claim, <<"sub">>}, <<"/">>], #{<<"sub">> => <<"joe">>}, {eq, <<"user/joe/">>}},
+			{[<<>>, {claim, <<"sub">>}], #{<<"sub">> => <<"joe">>}, {eq, <<"joe">>}},
+			%% w/ rest
+			{[rest], #{}, {{0, 0}, <<>>}},
+			{[<<>>, rest], #{}, {{0, 0}, <<>>}},
+			{[<<"user">>, rest], #{}, {{0, 4}, <<"user">>}},
+			{[<<"user/">>, {claim, <<"sub">>}, rest], #{<<"sub">> => <<"joe">>}, {{0, 8}, <<"user/joe">>}},
+			{[<<"user/">>, {claim, <<"sub">>}, <<"/">>, rest], #{<<"sub">> => <<"joe">>}, {{0, 9}, <<"user/joe/">>}},
+			{[rest, <<"any">>], #{}, {{0, 0}, <<>>}} ],
+
+	[{lists:flatten(io_lib:format("~p", [Pattern])), ?_assertEqual(Output, pattern_input(Pattern, Claims))}
+		|| {Pattern, Claims, Output} <- Test].
+
+match_pattern_test_() ->
+	Test =
+		[	%% equal
+			{[], #{}, <<>>},
+			{[<<>>], #{}, <<>>},
+			{[<<"user">>], #{}, <<"user">>},
+			{[<<"user/">>, {claim, <<"sub">>}], #{<<"sub">> => <<"joe">>}, <<"user/joe">>},
+			{[<<"user/">>, {claim, <<"sub">>}, <<"/">>], #{<<"sub">> => <<"joe">>}, <<"user/joe/">>},
+			{[<<>>, {claim, <<"sub">>}], #{<<"sub">> => <<"joe">>}, <<"joe">>},
+			%% w/ rest
+			{[rest], #{}, <<>>},
+			{[<<>>, rest], #{}, <<>>},
+			{[<<"user">>, rest], #{}, <<"user">>},
+			{[<<"user/">>, {claim, <<"sub">>}, rest], #{<<"sub">> => <<"joe">>}, <<"user/joe">>},
+			{[<<"user/">>, {claim, <<"sub">>}, <<"/">>, rest], #{<<"sub">> => <<"joe">>}, <<"user/joe/">>},
+			{[<<>>, {claim, <<"sub">>}, rest], #{<<"sub">> => <<"joe">>}, <<"joe">>},
+			{[rest, <<"any">>], #{}, <<>>}
+		],
+
+	[{lists:flatten(io_lib:format("~p", [Pattern])), ?_assertEqual(ok, match_pattern(Pattern, Claims, Input))}
+		|| {Pattern, Claims, Input} <- Test].
+
+-endif.
