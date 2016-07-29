@@ -2,18 +2,18 @@
 
 [![Build Status][travis-img]][travis]
 
-The plugin for VerneMQ that is providing client authentication via JSON Web Tokens (JWT).
+The plugin for VerneMQ that provides client authentication via JSON Web Tokens (JWT).
 
 
 
 ### Keys
 
 Currently, only keys in PEM and DER formats are supported.
-To be processed by the plugin, key files must follow the name convention:
+To be processed by the plugin application, key files must follow the name convention:
 - For PEM keys: `pem:issuer[:kid][:anything]`
 - For DER keys: `der:issuer:[kid]:alg[:anything]`
-Key files should be accessible for the application.
-`keys_directory` application environment variable is pointing to the directory with keys.
+Key files should be accessible for the application
+(`keys_directory` application environment variable is pointing to the directory with keys).
 
 
 
@@ -33,8 +33,8 @@ Key files should be accessible for the application.
 ### Configuration
 
 It's possible to rewrite plugin application environment variables when plugin is being enabled
-by putting the `vernemq.conf` configuration file into the `etc` directory of VerneMQ release.
-The path to configuration file can be changed by setting `config_file` application environment variable.
+by putting the `vernemq.conf` configuration file into the `etc` directory of VerneMQ release
+(the path to configuration file can be changed by setting `config_file` application environment variable).
 
 
 
