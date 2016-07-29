@@ -1,5 +1,7 @@
 # VerneMQ JOSE Authentication Plugin
 
+[![Build Status][travis-img]][travis]
+
 The plugin for VerneMQ that is providing client authentication via JSON Web Tokens (JWT).
 
 
@@ -76,4 +78,6 @@ mosquitto_pub -h localhost -t topic -m hello -i joe -u joe -P
 The source code is provided under the terms of [the MIT license][license].
 
 [license]:http://www.opensource.org/licenses/MIT
+[travis]:https://travis-ci.org/manifest/vmq_joseauth?branch=master
+[travis-img]:https://secure.travis-ci.org/manifest/vmq_joseauth.png
 
