@@ -24,7 +24,6 @@
 
 -module(vmq_joseauth).
 -behaviour(auth_on_register_hook).
--include_lib("vmq_commons/include/vmq_types.hrl").
 
 %% API
 -export([
@@ -53,7 +52,7 @@
 	username_pattern/0,
 	keys_directory/0,
 	verify_options/0,
-	success_result/0,
+	auth_on_register_success_result/0,
 	config_file/0
 ]).
 
@@ -133,7 +132,7 @@ auth_on_register(_Peer, {_MountPoint, ClientId}, UserName, Password, _CleanSessi
 		Claims = jose_jws_compact:decode_fn(fun select_key/2, Password),
 		match_pattern(username_pattern(), Claims, UserName),
 		match_pattern(client_id_pattern(), Claims, ClientId),
-		success_result()
+		auth_on_register_success_result()
 	catch _:R ->
 		Reason = {bad_access_token, R},
 		error_logger:info_report(
@@ -179,8 +178,8 @@ verify_options() ->
 	Default = #{verify => [exp, nbf, iat]},
 	application:get_env(?APP, ?FUNCTION_NAME, Default).
 
--spec success_result() -> ok | next.
-success_result() ->
+-spec auth_on_register_success_result() -> ok | next.
+auth_on_register_success_result() ->
 	application:get_env(?APP, ?FUNCTION_NAME, ok).
 
 -spec config_file() -> binary().
