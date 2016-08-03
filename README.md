@@ -65,11 +65,11 @@ Token =
     Priv).
 ```
 
-Now, we can use created access token to send messages.
+Now, we can use (pass it as a password) created access token to send messages.
 
 ```bash
 ## Sending a message to the broker (plugin should be enabled)
-mosquitto_pub -h localhost -t topic -m hello -i joe -u joe -P 
+mosquitto_pub -h localhost -t topic -m hello -i joe -u joe -P eyJhbGciOiJ...
 ```
 
 
