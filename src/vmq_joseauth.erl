@@ -32,7 +32,9 @@
 	load_keys/0,
 	remove_keys/0,
 	match_pattern/3,
-	read_config/1
+	read_configs/0,
+	read_configs/1,
+	read_config/2
 ]).
 
 %% Hooks
@@ -53,7 +55,7 @@
 	keys_directory/0,
 	verify_options/0,
 	auth_on_register_success_result/0,
-	config_file/0
+	config_files/0
 ]).
 
 %% Definitions
@@ -119,6 +121,29 @@ remove_keys() ->
 match_pattern(Pattern, Claims, Input) ->
 	match_pattern_input(pattern_input(Pattern, Claims), Input).
 
+-spec read_configs() -> ok.
+read_configs() ->
+	Initial = config_files(),
+	read_configs(Initial),
+	case config_files() of
+		Initial -> ok;
+		Changed -> read_configs(Changed)
+	end.
+
+-spec read_configs([{atom(), binary()}]) -> ok.
+read_configs(L) ->
+	[read_config(App, Path) || {App, Path} <- L],
+	ok.
+
+-spec read_config(atom(), binary()) -> ok.
+read_config(App, Path) ->
+	_ =
+		case file:consult(Path) of
+			{ok, L} -> [application:set_env(App, Key, Val) || {Key, Val} <- L];
+			_       -> ignore
+		end,
+	ok.
+
 %% =============================================================================
 %% Hooks
 %% =============================================================================
@@ -148,8 +173,8 @@ auth_on_register(_Peer, {_MountPoint, ClientId}, UserName, Password, _CleanSessi
 
 -spec start() -> ok.
 start() ->
+	read_configs(),
 	{ok, _} = application:ensure_all_started(?APP),
-	read_config(config_file()),
 	load_keys().
 
 -spec stop() -> ok.
@@ -182,18 +207,11 @@ verify_options() ->
 auth_on_register_success_result() ->
 	application:get_env(?APP, ?FUNCTION_NAME, ok).
 
--spec config_file() -> binary().
-config_file() ->
-	list_to_binary(application:get_env(?APP, ?FUNCTION_NAME, "./etc/joseauth.conf")).
-
--spec read_config(binary()) -> ok.
-read_config(Path) ->
-	_ =
-		case file:consult(Path) of
-			{ok, L} -> [application:set_env(?APP, Key, Val) || {Key, Val} <- L];
-			_       -> ignore
-		end,
-	ok.
+-spec config_files() -> [{atom(), binary()}].
+config_files() ->
+	Default = [{?APP, "./etc/joseauth.conf"}],
+	[{App, list_to_binary(Val)}
+		|| {App, Val} <- application:get_env(?APP, ?FUNCTION_NAME, Default)].
 
 %% =============================================================================
 %% Internal functions
