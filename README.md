@@ -34,16 +34,29 @@ Key files should be accessible for the application
 
 It's possible to rewrite plugin application environment variables when plugin is being enabled
 by putting the `vernemq.conf` configuration file into the `etc` directory of VerneMQ release
-(the path to configuration file can be changed by setting `config_file` application environment variable).
+(the path to configuration file can be changed by setting `config_files` application environment variable,
+for instance `[{vmq_joseauth, "/etc/joseauth.conf"}]`).
 
 
 
 
 ### How To Use
 
+Build and run the docker container
+
+```bash
+$ ./run-docker.sh
+```
+
 In the following example we will create a pair of keys.
 The public key will be written to the directory accessible for the plugin application
 and private one will be used to create an access token. 
+
+Execute following commands in container's shell:
+
+```bash
+$ make app shell
+```
 
 ```erlang
 %% Generating a pair of keys
@@ -51,8 +64,8 @@ Iss = <<"example.org">>,
 Alg = <<"ES256">>,
 {Pub, Priv} = jose_jwa:generate_key(Alg).
 
-%% Storing the public key into the file `pem:example.org`
-file:write_file(<<"priv/keys/pem:", Iss/binary>>, jose_pem:key(Alg, Pub)).
+%% Storing the public key into the file `der:example.org::ES256:pub`
+file:write_file(<<"priv/keys/der:", Iss/binary, "::", Alg/binary, $:, "pub">>, Pub).
 
 %% Creating an access token
 Token =
@@ -63,13 +76,22 @@ Token =
       exp => 4607280000},
     Alg,
     Priv).
+
+%% Printing the access token
+io:format("~p~n", [Token]).
+```
+
+We need to build and enable the plugin:
+
+```bash
+$ make rel
+$ vmq-admin plugin enable --name vmq_joseauth --path $(pwd)/_rel/vmq_joseauth
 ```
 
 Now, we can use (pass it as a password) created access token to send messages.
 
 ```bash
-## Sending a message to the broker (plugin should be enabled)
-mosquitto_pub -h localhost -t topic -m hello -i joe -u joe -P eyJhbGciOiJ...
+$ mosquitto_pub -h localhost -t topic -m hello -i joe -u joe -P eyJhbGci...
 ```
 
 

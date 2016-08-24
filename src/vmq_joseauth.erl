@@ -209,7 +209,7 @@ auth_on_register_success_result() ->
 
 -spec config_files() -> [{atom(), binary()}].
 config_files() ->
-	Default = [{?APP, "./etc/joseauth.conf"}],
+	Default = [{?APP, "/etc/vernemq/joseauth.conf"}],
 	[{App, list_to_binary(Val)}
 		|| {App, Val} <- application:get_env(?APP, ?FUNCTION_NAME, Default)].
 

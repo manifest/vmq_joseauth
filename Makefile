@@ -7,7 +7,7 @@ DEPS = \
 	jose
 
 dep_vmq_commons = git git://github.com/erlio/vmq_commons.git 1.0.0
-dep_jose = git git://github.com/manifest/jose-erlang.git v0.1.0
+dep_jose = git git://github.com/manifest/jose-erlang.git v0.1.1
 
 SHELL_DEPS = tddreloader
 SHELL_OPTS = \
