@@ -17,7 +17,8 @@ RUN set -xe \
 	&& apt-get update \
 	&& apt-get -y --no-install-recommends install \
 		erlang-nox=1:19.0-1 \
-		erlang-dev=1:19.0-1 \
+		erlang-dialyzer \
+		erlang-dev \
 		mosquitto-clients \
 		vim-nox \
 		less \
