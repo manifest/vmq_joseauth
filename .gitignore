@@ -21,3 +21,5 @@ erl_crash.dump
 *.d
 *.plt
 
+# Project
+priv/keys
