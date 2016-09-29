@@ -62,10 +62,11 @@ $ make app shell
 %% Generating a pair of keys
 Iss = <<"example.org">>,
 Alg = <<"ES256">>,
-{Pub, Priv} = jose_jwa:generate_key(Alg).
+{Pub, Priv} = jose_jwa:generate_key(Alg),
 
 %% Storing the public key into the file `der:example.org::ES256:pub`
-file:write_file(<<"priv/keys/der:", Iss/binary, "::", Alg/binary, $:, "pub">>, Pub).
+[file:make_dir(Dir) || Dir <- [<<"priv">>, <<"priv/keys">>]],
+file:write_file(<<"priv/keys/der:", Iss/binary, "::", Alg/binary, $:, "pub">>, Pub),
 
 %% Creating an access token
 Token =
@@ -75,7 +76,7 @@ Token =
       sub => <<"joe">>,
       exp => 4607280000},
     Alg,
-    Priv).
+    Priv),
 
 %% Printing the access token
 io:format("~p~n", [Token]).
@@ -91,7 +92,7 @@ $ vmq-admin plugin enable --name vmq_joseauth --path $(pwd)/_rel/vmq_joseauth
 Now, we can use (pass it as a password) created access token to send messages.
 
 ```bash
-$ mosquitto_pub -h localhost -t topic -m hello -i joe -u joe -P eyJhbGci...
+$ mosquitto_pub -h localhost -t greetings -m hello -i joe -u joe -P eyJhbGci...
 ```
 
 
